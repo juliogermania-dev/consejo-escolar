@@ -3,69 +3,217 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Control de Insumos - Consejo Escolar Leandro N. Alem</title>
+  <title>Sistema de Insumos - Consejo Escolar L. N. Alem</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Librería para generar PDFs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  
+  <!-- SDKs de Firebase (v9 Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-slate-100 font-sans">
   <div id="root"></div>
 
   <script type="text/jsx">
-    const { useState } = React;
+    const { useState, useEffect } = React;
+
+    // --- CONFIGURACIÓN DE FIREBASE ---
+    // Reemplaza los valores con la configuración exacta de tu consola de Firebase celna-limpieza
+    const firebaseConfig = {
+      apiKey: "AIzaSyYOUR_API_KEY_HERE",
+      authDomain: "celna-limpieza.firebaseapp.com",
+      projectId: "celna-limpieza",
+      storageBucket: "celna-limpieza.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef123456"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
     function App() {
+      // Estado Autenticación
       const [user, setUser] = useState(null);
-      const [username, setUsername] = useState("");
-      const [escuela, setEscuela] = useState("EP N° 1 - Vedia");
-      const [insumo, setInsumo] = useState("Lavandina (Bidón 5L)");
-      const [cantidad, setCantidad] = useState(5);
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [authError, setAuthError] = useState("");
+      const [tab, setTab] = useState("pedidos"); // pedidos, establecimientos, stock, historial
 
-      const handleLogin = (e) => {
+      // Estado Establecimientos
+      const [escuelas, setEscuelas] = useState([
+        { id: "1", nombre: "EP N° 1 - Vedia", localidad: "Vedia" },
+        { id: "2", nombre: "EES N° 1 - Leandro N. Alem", localidad: "L. N. Alem" },
+        { id: "3", nombre: "Escuela Agraria", localidad: "El Dorado" }
+      ]);
+      const [nuevaEscuela, setNuevaEscuela] = useState("");
+      const [nuevaLocalidad, setNuevaLocalidad] = useState("Vedia");
+
+      // Estado Stock Insumos
+      const [stock, setStock] = useState([
+        { id: "lavandina", nombre: "Lavandina (Bidón 5L)", cantidad: 120 },
+        { id: "detergente", nombre: "Detergente Concentrado (Bidón 5L)", cantidad: 80 },
+        { id: "desinfectante", nombre: "Desinfectante de Pisos (5L)", cantidad: 60 },
+        { id: "jabon", nombre: "Jabón Líquido Manos (5L)", cantidad: 40 },
+        { id: "panos", nombre: "Pack Paños de Piso (x10)", cantidad: 150 }
+      ]);
+
+      // Estado Pedido Mutil-Artículos
+      const [escuelaSeleccionada, setEscuelaSeleccionada] = useState("");
+      const [carrito, setCarrito] = useState([]);
+      const [artSeleccionado, setArtSeleccionado] = useState("lavandina");
+      const [cantSeleccionada, setCantSeleccionada] = useState(1);
+
+      // Estado Historial
+      const [historial, setHistorial] = useState([]);
+
+      useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((u) => {
+          if (u) setUser(u);
+          else setUser(null);
+        });
+        return () => unsubscribe();
+      }, []);
+
+      // Login con Email y Contraseña
+      const handleLogin = async (e) => {
         e.preventDefault();
-        if (username.trim()) setUser(username);
+        setAuthError("");
+        try {
+          await auth.signInWithEmailAndPassword(email, password);
+        } catch (err) {
+          setAuthError("Usuario o contraseña incorrectos");
+        }
       };
 
-      const generarPDF = () => {
-        const elemento = document.getElementById("remito-imprimible");
+      const handleLogout = () => auth.signOut();
+
+      // Agregar artículo al pedido actual
+      const agregarAlCarrito = () => {
+        const itemStock = stock.find(s => s.id === artSeleccionado);
+        if (!itemStock) return;
+        
+        if (cantSeleccionada > itemStock.cantidad) {
+          alert(`Stock insuficiente. Solo quedan ${itemStock.cantidad} unidades disponibles.`);
+          return;
+        }
+
+        const existe = carrito.find(c => c.id === artSeleccionado);
+        if (existe) {
+          setCarrito(carrito.map(c => c.id === artSeleccionado ? { ...c, cantidad: c.cantidad + Number(cantSeleccionada) } : c));
+        } else {
+          setCarrito([...carrito, { id: itemStock.id, nombre: itemStock.nombre, cantidad: Number(cantSeleccionada) }]);
+        }
+      };
+
+      const quitarDelCarrito = (id) => {
+        setCarrito(carrito.filter(c => c.id !== id));
+      };
+
+      // Confirmar Pedido y Descontar Stock
+      const confirmarPedido = () => {
+        if (!escuelaSeleccionada) {
+          alert("Seleccione un establecimiento");
+          return;
+        }
+        if (carrito.length === 0) {
+          alert("El pedido debe contener al menos un artículo");
+          return;
+        }
+
+        // Actualizar Stock Local
+        const nuevoStock = stock.map(st => {
+          const pedidoItem = carrito.find(c => c.id === st.id);
+          if (pedidoItem) {
+            return { ...st, cantidad: st.cantidad - pedidoItem.cantidad };
+          }
+          return st;
+        });
+        setStock(nuevoStock);
+
+        // Guardar Remito en Historial
+        const nuevoRemito = {
+          id: `0001-${Math.floor(1000 + Math.random() * 9000)}`,
+          fecha: new Date().toLocaleDateString(),
+          escuela: escuelaSeleccionada,
+          articulos: [...carrito],
+          operador: user.email
+        };
+        setHistorial([nuevoRemito, ...historial]);
+
+        // Exportar a PDF
+        const elemento = document.getElementById("remito-pdf");
         const opt = {
-          margin:       1,
-          filename:     `remito-consejo-alem-${Date.now()}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2 },
-          jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+          margin: 0.5,
+          filename: `remito-${nuevoRemito.id}.pdf`,
+          html2canvas: { scale: 2 },
+          jsPDF: { format: 'a4', orientation: 'portrait' }
         };
         html2pdf().from(elemento).save();
+
+        setCarrito([]);
+        alert("Pedido registrado con éxito y stock actualizado.");
       };
 
+      // Agregar Establecimiento
+      const agregarEstablecimiento = (e) => {
+        e.preventDefault();
+        if (!nuevaEscuela.trim()) return;
+        const nueva = { id: Date.now().toString(), nombre: nuevaEscuela, localidad: nuevaLocalidad };
+        setEscuelas([...escuelas, nueva]);
+        setNuevaEscuela("");
+      };
+
+      const borrarEstablecimiento = (id) => {
+        setEscuelas(escuelas.filter(e => e.id !== id));
+      };
+
+      // VISTA LOGIN
       if (!user) {
         return (
           <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900">
             <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-200">
               <div className="text-center mb-6">
-                <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">
+                <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold uppercase">
                   Consejo Escolar Leandro N. Alem
                 </span>
-                <h1 className="text-2xl font-black text-slate-800 mt-3">Control de Insumos</h1>
-                <p className="text-sm text-slate-500">Inicie sesión para acceder al sistema</p>
+                <h1 className="text-2xl font-black text-slate-800 mt-3">Acceso al Sistema</h1>
+                <p className="text-sm text-slate-500">Inicie sesión con su usuario y contraseña</p>
               </div>
+
+              {authError && <div className="p-3 bg-red-100 text-red-700 text-xs rounded-lg mb-4">{authError}</div>}
+
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Usuario / Operador</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Correo Electrónico</label>
                   <input 
-                    type="text" 
-                    required
-                    placeholder="Ej: adm_limpieza"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    type="email" 
+                    required 
+                    placeholder="operador@consejo.edu.ar"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
-                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition">
-                  Ingresar al Sistema
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Contraseña</label>
+                  <input 
+                    type="password" 
+                    required 
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm transition">
+                  Ingresar
                 </button>
               </form>
             </div>
@@ -73,116 +221,202 @@
         );
       }
 
+      // VISTA PANEL PRINCIPAL
       return (
-        <div className="min-h-screen p-4 md:p-8 max-w-4xl mx-auto">
-          <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+          <header className="bg-white p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
-              <span className="text-xs font-bold text-emerald-600 uppercase">Sistema Oficial de Insumos</span>
+              <span className="text-xs font-bold text-emerald-600 uppercase">Sistema de Control de Insumos</span>
               <h1 className="text-2xl font-black text-slate-800">Consejo Escolar - L. N. Alem</h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm bg-slate-100 px-3 py-1.5 rounded-lg font-medium text-slate-700">
-                👤 Operador: <strong className="text-emerald-700">{user}</strong>
+              <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-lg text-slate-700 font-medium">
+                👤 {user.email}
               </span>
-              <button onClick={() => setUser(null)} className="text-sm text-red-600 hover:underline font-semibold">
-                Salir
+              <button onClick={handleLogout} className="text-xs text-red-600 font-bold hover:underline">
+                Cerrar Sesión
               </button>
             </div>
           </header>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Panel de Carga */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Generar Nuevo Remito</h2>
-              <div className="space-y-4">
+          {/* Menú Naves */}
+          <div className="flex gap-2 border-b border-slate-200">
+            <button onClick={() => setTab("pedidos")} className={`px-4 py-2 text-sm font-bold border-b-2 ${tab === 'pedidos' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>📦 Nuevo Pedido</button>
+            <button onClick={() => setTab("establecimientos")} className={`px-4 py-2 text-sm font-bold border-b-2 ${tab === 'establecimientos' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>🏫 Establecimientos</button>
+            <button onClick={() => setTab("stock")} className={`px-4 py-2 text-sm font-bold border-b-2 ${tab === 'stock' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>📊 Stock Insumos</button>
+            <button onClick={() => setTab("historial")} className={`px-4 py-2 text-sm font-bold border-b-2 ${tab === 'historial' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>📜 Historial Remitos</button>
+          </div>
+
+          {/* TAB 1: NUEVO PEDIDO */}
+          {tab === "pedidos" && (
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+                <h2 className="text-lg font-bold text-slate-800 border-b pb-2">Armar Pedido Multi-Artículo</h2>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Establecimiento Escolar</label>
-                  <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-                    <option>EP N° 1 - Vedia</option>
-                    <option>EP N° 2 - Juan B. Alberdi</option>
-                    <option>EES N° 1 - Leandro N. Alem</option>
-                    <option>Jardín de Infantes N° 901 - Vedia</option>
-                    <option>Escuela Agraria - El Dorado</option>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Seleccionar Establecimiento</label>
+                  <select value={escuelaSeleccionada} onChange={(e) => setEscuelaSeleccionada(e.target.value)} className="w-full p-2 border rounded-lg text-sm">
+                    <option value="">-- Seleccione Escuela --</option>
+                    {escuelas.map(e => <option key={e.id} value={e.nombre}>{e.nombre} ({e.localidad})</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Insumo de Limpieza</label>
-                  <select value={insumo} onChange={(e) => setInsumo(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-                    <option>Lavandina (Bidón 5L)</option>
-                    <option>Detergente Concentrado (Bidón 5L)</option>
-                    <option>Desinfectante de Pisos (Bidón 5L)</option>
-                    <option>Jabón Líquido para Manos (Bidón 5L)</option>
-                    <option>Paños de Piso y Baldetones (Pack x10)</option>
-                  </select>
+
+                <div className="border-t pt-4 space-y-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">Agregar Insumos al Pedido</label>
+                  <div className="flex gap-2">
+                    <select value={artSeleccionado} onChange={(e) => setArtSeleccionado(e.target.value)} className="w-full p-2 border rounded-lg text-sm">
+                      {stock.map(s => <option key={s.id} value={s.id}>{s.nombre} (Disponibles: {s.cantidad})</option>)}
+                    </select>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      value={cantSeleccionada} 
+                      onChange={(e) => setCantSeleccionada(e.target.value)} 
+                      className="w-20 p-2 border rounded-lg text-sm"
+                    />
+                    <button onClick={agregarAlCarrito} className="bg-emerald-600 text-white font-bold px-4 rounded-lg text-xs hover:bg-emerald-700">
+                      + Añadir
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cantidad a Entregar</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    value={cantidad} 
-                    onChange={(e) => setCantidad(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+
+                {/* Lista de Artículos en el Pedido */}
+                <div className="border-t pt-4">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Artículos Seleccionados</h3>
+                  {carrito.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No hay artículos agregados al pedido aún.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {carrito.map(item => (
+                        <div key={item.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg text-sm">
+                          <span>{item.nombre} x <strong>{item.cantidad}</strong></span>
+                          <button onClick={() => quitarDelCarrito(item.id)} className="text-red-500 font-bold text-xs hover:underline">Quitar</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Vista Previa del Remito Oficial */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Vista Previa del Remito</h2>
-                
-                {/* Contenedor que se exportará a PDF */}
-                <div id="remito-imprimible" className="bg-slate-50 p-6 rounded-xl border border-slate-300 text-slate-800 text-sm space-y-3">
-                  <div className="text-center border-b pb-2">
-                    <p className="font-bold text-base">CONSEJO ESCOLAR DE LEANDRO N. ALEM</p>
-                    <p className="text-xs text-slate-500">Provincia de Buenos Aires - Control de Insumos</p>
-                  </div>
-                  <div className="flex justify-between text-xs pt-1">
-                    <span><strong>Fecha:</strong> {new Date().toLocaleDateString()}</span>
-                    <span><strong>Remito N°:</strong> 0001-{Math.floor(1000 + Math.random() * 9000)}</span>
-                  </div>
-                  <div className="pt-2">
-                    <p><strong>Destino:</strong> {escuela}</p>
-                    <p><strong>Operador Responsable:</strong> {user}</p>
-                  </div>
-                  <div className="border-t border-b py-2 my-2">
-                    <table className="w-full text-left">
+              {/* VISTA PREVIA Y PDF */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border flex flex-col justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800 border-b pb-2 mb-4">Vista Previa Remito Oficial</h2>
+                  <div id="remito-pdf" className="bg-slate-50 p-6 rounded-xl border text-slate-800 text-xs space-y-3">
+                    <div className="text-center border-b pb-2">
+                      <p className="font-bold text-sm">CONSEJO ESCOLAR LEANDRO N. ALEM</p>
+                      <p className="text-slate-500">Provincia de Buenos Aires</p>
+                    </div>
+                    <p><strong>Destino:</strong> {escuelaSeleccionada || "__________________"}</p>
+                    <p><strong>Operador:</strong> {user.email}</p>
+                    <table className="w-full text-left border-collapse my-2">
                       <thead>
-                        <tr className="text-xs text-slate-500 uppercase">
-                          <th>Insumo</th>
-                          <th className="text-right">Cant.</th>
+                        <tr className="border-b text-slate-500">
+                          <th className="py-1">Artículo</th>
+                          <th className="text-right py-1">Cant.</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td>{insumo}</td>
-                          <td className="text-right font-bold">{cantidad}</td>
-                        </tr>
+                        {carrito.map(item => (
+                          <tr key={item.id} className="border-b border-slate-200">
+                            <td className="py-1">{item.nombre}</td>
+                            <td className="text-right py-1 font-bold">{item.cantidad}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="pt-8 flex justify-between text-xs">
-                    <div className="text-center">
-                      <div className="border-t border-slate-400 w-32 mx-auto pt-1"></div>
-                      <span>Firma Receptor</span>
-                    </div>
-                    <div className="text-center">
-                      <div className="border-t border-slate-400 w-32 mx-auto pt-1"></div>
-                      <span>Sello Consejo Escolar</span>
+                    <div className="pt-6 flex justify-between text-[10px]">
+                      <div className="text-center">____________________<br/>Firma Receptor</div>
+                      <div className="text-center">____________________<br/>Sello Consejo Escolar</div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <button 
-                onClick={generarPDF}
-                className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
-                📥 Descargar Remito Oficial en PDF
-              </button>
+                <button onClick={confirmarPedido} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 mt-4">
+                  📥 Confirmar, Actualizar Stock y Descargar Remito PDF
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB 2: ESTABLECIMIENTOS */}
+          {tab === "establecimientos" && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-6">
+              <h2 className="text-lg font-bold text-slate-800 border-b pb-2">Gestión de Establecimientos Educativos</h2>
+              <form onSubmit={agregarEstablecimiento} className="flex gap-2">
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="Ej: Escuela Primaria N° 5" 
+                  value={nuevaEscuela} 
+                  onChange={(e) => setNuevaEscuela(e.target.value)} 
+                  className="w-full p-2 border rounded-lg text-sm"
+                />
+                <select value={nuevaLocalidad} onChange={(e) => setNuevaLocalidad(e.target.value)} className="p-2 border rounded-lg text-sm">
+                  <option>Vedia</option>
+                  <option>J. B. Alberdi</option>
+                  <option>L. N. Alem</option>
+                  <option>El Dorado</option>
+                  <option>Fortín Acha</option>
+                </select>
+                <button type="submit" className="bg-emerald-600 text-white font-bold px-4 rounded-lg text-xs whitespace-nowrap">
+                  + Agregar Escuela
+                </button>
+              </form>
+
+              <div className="divide-y">
+                {escuelas.map(esc => (
+                  <div key={esc.id} className="py-3 flex justify-between items-center text-sm">
+                    <div>
+                      <p className="font-bold text-slate-800">{esc.nombre}</p>
+                      <p className="text-xs text-slate-500">Localidad: {esc.localidad}</p>
+                    </div>
+                    <button onClick={() => borrarEstablecimiento(esc.id)} className="text-red-500 font-bold text-xs hover:underline">Eliminar</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CONTROL DE STOCK */}
+          {tab === "stock" && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+              <h2 className="text-lg font-bold text-slate-800 border-b pb-2">Stock Actual de Insumos de Limpieza</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {stock.map(item => (
+                  <div key={item.id} className="p-4 bg-slate-50 border rounded-xl flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">{item.nombre}</p>
+                      <p className="text-xs text-slate-500">Estado: {item.cantidad > 20 ? '🟢 Stock Normal' : '🔴 Stock Bajo'}</p>
+                    </div>
+                    <span className="text-2xl font-black text-emerald-700">{item.cantidad}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: HISTORIAL */}
+          {tab === "historial" && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+              <h2 className="text-lg font-bold text-slate-800 border-b pb-2">Historial de Remitos Emitidos</h2>
+              {historial.length === 0 ? (
+                <p className="text-xs text-slate-400">No hay remitos registrados en esta sesión.</p>
+              ) : (
+                <div className="space-y-3">
+                  {historial.map((rem, idx) => (
+                    <div key={idx} className="p-4 bg-slate-50 border rounded-xl text-sm space-y-1">
+                      <div className="flex justify-between font-bold text-emerald-700">
+                        <span>Remito N° {rem.id}</span>
+                        <span>{rem.fecha}</span>
+                      </div>
+                      <p><strong>Escuela:</strong> {rem.escuela}</p>
+                      <p className="text-xs text-slate-500"><strong>Insumos:</strong> {rem.articulos.map(a => `${a.nombre} (${a.cantidad})`).join(', ')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }
