@@ -3,36 +3,185 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Consejo Escolar - Leandro N. Alem</title>
+  <title>Control de Insumos - Consejo Escolar Leandro N. Alem</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Librería para generar PDFs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body class="bg-slate-100 font-sans">
   <div id="root"></div>
 
   <script type="text/jsx">
-    const { useState, useEffect } = React;
+    const { useState } = React;
 
     function App() {
+      const [user, setUser] = useState(null);
+      const [username, setUsername] = useState("");
+      const [escuela, setEscuela] = useState("EP N° 1 - Vedia");
+      const [insumo, setInsumo] = useState("Lavandina (Bidón 5L)");
+      const [cantidad, setCantidad] = useState(5);
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (username.trim()) setUser(username);
+      };
+
+      const generarPDF = () => {
+        const elemento = document.getElementById("remito-imprimible");
+        const opt = {
+          margin:       1,
+          filename:     `remito-consejo-alem-${Date.now()}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2 },
+          jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().from(elemento).save();
+      };
+
+      if (!user) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-200">
+              <div className="text-center mb-6">
+                <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">
+                  Consejo Escolar Leandro N. Alem
+                </span>
+                <h1 className="text-2xl font-black text-slate-800 mt-3">Control de Insumos</h1>
+                <p className="text-sm text-slate-500">Inicie sesión para acceder al sistema</p>
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Usuario / Operador</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Ej: adm_limpieza"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition">
+                  Ingresar al Sistema
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-slate-200">
-            <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold uppercase">
-              Sistema Oficial
-            </span>
-            <h1 className="text-2xl font-bold text-slate-800 mt-3">Consejo Escolar</h1>
-            <p className="text-sm text-slate-500 mb-6">Partido de Leandro N. Alem</p>
-            
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left mb-6 text-sm">
-              <p className="font-semibold text-slate-700">✓ Estado: Listo para conectar</p>
-              <p className="text-slate-500 text-xs mt-1">Proyecto Firebase: <code className="text-emerald-600 font-bold">celna-limpieza</code></p>
+        <div className="min-h-screen p-4 md:p-8 max-w-4xl mx-auto">
+          <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div>
+              <span className="text-xs font-bold text-emerald-600 uppercase">Sistema Oficial de Insumos</span>
+              <h1 className="text-2xl font-black text-slate-800">Consejo Escolar - L. N. Alem</h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm bg-slate-100 px-3 py-1.5 rounded-lg font-medium text-slate-700">
+                👤 Operador: <strong className="text-emerald-700">{user}</strong>
+              </span>
+              <button onClick={() => setUser(null)} className="text-sm text-red-600 hover:underline font-semibold">
+                Salir
+              </button>
+            </div>
+          </header>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Panel de Carga */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Generar Nuevo Remito</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Establecimiento Escolar</label>
+                  <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                    <option>EP N° 1 - Vedia</option>
+                    <option>EP N° 2 - Juan B. Alberdi</option>
+                    <option>EES N° 1 - Leandro N. Alem</option>
+                    <option>Jardín de Infantes N° 901 - Vedia</option>
+                    <option>Escuela Agraria - El Dorado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Insumo de Limpieza</label>
+                  <select value={insumo} onChange={(e) => setInsumo(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                    <option>Lavandina (Bidón 5L)</option>
+                    <option>Detergente Concentrado (Bidón 5L)</option>
+                    <option>Desinfectante de Pisos (Bidón 5L)</option>
+                    <option>Jabón Líquido para Manos (Bidón 5L)</option>
+                    <option>Paños de Piso y Baldetones (Pack x10)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cantidad a Entregar</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={cantidad} 
+                    onChange={(e) => setCantidad(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Aplicación configurada para el control de insumos de limpieza.
-            </p>
+            {/* Vista Previa del Remito Oficial */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Vista Previa del Remito</h2>
+                
+                {/* Contenedor que se exportará a PDF */}
+                <div id="remito-imprimible" className="bg-slate-50 p-6 rounded-xl border border-slate-300 text-slate-800 text-sm space-y-3">
+                  <div className="text-center border-b pb-2">
+                    <p className="font-bold text-base">CONSEJO ESCOLAR DE LEANDRO N. ALEM</p>
+                    <p className="text-xs text-slate-500">Provincia de Buenos Aires - Control de Insumos</p>
+                  </div>
+                  <div className="flex justify-between text-xs pt-1">
+                    <span><strong>Fecha:</strong> {new Date().toLocaleDateString()}</span>
+                    <span><strong>Remito N°:</strong> 0001-{Math.floor(1000 + Math.random() * 9000)}</span>
+                  </div>
+                  <div className="pt-2">
+                    <p><strong>Destino:</strong> {escuela}</p>
+                    <p><strong>Operador Responsable:</strong> {user}</p>
+                  </div>
+                  <div className="border-t border-b py-2 my-2">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-xs text-slate-500 uppercase">
+                          <th>Insumo</th>
+                          <th className="text-right">Cant.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>{insumo}</td>
+                          <td className="text-right font-bold">{cantidad}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="pt-8 flex justify-between text-xs">
+                    <div className="text-center">
+                      <div className="border-t border-slate-400 w-32 mx-auto pt-1"></div>
+                      <span>Firma Receptor</span>
+                    </div>
+                    <div className="text-center">
+                      <div className="border-t border-slate-400 w-32 mx-auto pt-1"></div>
+                      <span>Sello Consejo Escolar</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={generarPDF}
+                className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                📥 Descargar Remito Oficial en PDF
+              </button>
+            </div>
           </div>
         </div>
       );
