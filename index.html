@@ -23,21 +23,20 @@
 
     // --- CONFIGURACIÓN DE FIREBASE ---
     // Reemplaza los valores con la configuración exacta de tu consola de Firebase celna-limpieza
-    const firebaseConfig = {
-      apiKey: "AIzaSyYOUR_API_KEY_HERE",
-      authDomain: "celna-limpieza.firebaseapp.com",
-      projectId: "celna-limpieza",
-      storageBucket: "celna-limpieza.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef123456"
-    };
+   const firebaseConfig = {
+  apiKey: "TU_API_KEY_REAL_AQUI",
+  authDomain: "celna-limpieza.firebaseapp.com",
+  projectId: "celna-limpieza",
+  storageBucket: "celna-limpieza.appspot.com",
+  messagingSenderId: "TUS_NUMEROS",
+  appId: "TU_APP_ID"
+};
 
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
     function App() {
       // Estado Autenticación
       const [user, setUser] = useState(null);
