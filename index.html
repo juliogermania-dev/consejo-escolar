@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consejo Escolar - Leandro N. Alem</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100 font-sans">
+  <div id="root"></div>
+
+  <script type="text/jsx">
+    const { useState, useEffect } = React;
+
+    function App() {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-slate-200">
+            <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold uppercase">
+              Sistema Oficial
+            </span>
+            <h1 className="text-2xl font-bold text-slate-800 mt-3">Consejo Escolar</h1>
+            <p className="text-sm text-slate-500 mb-6">Partido de Leandro N. Alem</p>
+            
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left mb-6 text-sm">
+              <p className="font-semibold text-slate-700">✓ Estado: Listo para conectar</p>
+              <p className="text-slate-500 text-xs mt-1">Proyecto Firebase: <code className="text-emerald-600 font-bold">celna-limpieza</code></p>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Aplicación configurada para el control de insumos de limpieza.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
